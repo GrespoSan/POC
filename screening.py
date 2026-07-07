@@ -76,22 +76,15 @@ def analyze_ticker(
     if swing is None:
         return None
 
-    # Estrae la fetta di dati racchiusa nel macro swing
     swing_df = swing.data(df)
-    
-    # Calcola il volume profile geometrico distribuito sul range High-Low
     profile = calculate_volume_profile(swing_df)
 
     if profile is None:
         return None
 
-    # Ultimo prezzo di chiusura disponibile sul mercato
     price = float(df["Close"].iloc[-1])
-
-    # Distanza percentuale simmetrica rispetto al POC di riferimento dello swing
     poc_distance = distance_from_poc(price, profile.poc)
 
-    # Filtro di tolleranza impostato dall'utente
     if poc_distance > poc_tolerance:
         return None
 
@@ -135,7 +128,6 @@ def run_screening(
 
     for i, ticker in enumerate(tickers):
         try:
-            # Carica lo storico applicando il lookback dinamico dell'interfaccia
             df = loader(ticker, lookback)
 
             result = analyze_ticker(
@@ -161,8 +153,6 @@ def run_screening(
 
     output = pd.DataFrame(results)
 
-    # Ranking: ordina prima per la massima vicinanza al POC (Ascending)
-    # poi per la forza dello swing (Descending)
     output = output.sort_values(
         by=["POC Distance %", "Score"],
         ascending=[True, False]
@@ -177,9 +167,6 @@ def run_screening(
 # ==========================================================
 
 def load_tickers(filename: str = "tickers.txt") -> List[str]:
-    """
-    Carica una lista pulita di ticker da file di testo locale.
-    """
     try:
         with open(filename, "r") as f:
             return [
@@ -190,10 +177,6 @@ def load_tickers(filename: str = "tickers.txt") -> List[str]:
     except FileNotFoundError:
         return []
 
-
-# ==========================================================
-# TEST EXECUTABLE
-# ==========================================================
 
 if __name__ == "__main__":
     from data import load_ticker
