@@ -117,7 +117,7 @@ def analyze_ticker(
 def run_screening(
     tickers: List[str],
     loader: Callable[[str, int], pd.DataFrame],
-    lookback: int = 500,  # <--- CORREZIONE: Parametro dinamico configurabile
+    lookback: int = 500,
     swing_window: int = 5,
     atr_period: int = 14,
     min_atr_ratio: float = 1.5,
@@ -151,7 +151,6 @@ def run_screening(
                 results.append(result.to_dict())
 
         except Exception:
-            # Un errore di caricamento o di calcolo su un singolo asset non deve bloccare lo screener
             continue
 
         if progress_callback:
@@ -163,7 +162,7 @@ def run_screening(
     output = pd.DataFrame(results)
 
     # Ranking: ordina prima per la massima vicinanza al POC (Ascending)
-    # poi per la forza/punteggio strutturale dello swing (Descending)
+    # poi per la forza dello swing (Descending)
     output = output.sort_values(
         by=["POC Distance %", "Score"],
         ascending=[True, False]
@@ -201,7 +200,6 @@ if __name__ == "__main__":
 
     test_tickers = ["AAPL", "MSFT", "NVDA", "TSLA"]
     
-    # Esecuzione di test locale a 500 candele standard
     df_results = run_screening(
         tickers=test_tickers,
         loader=load_ticker,
