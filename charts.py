@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import timedelta
 
 
 # ==========================================================
@@ -46,10 +47,9 @@ def fibonacci_levels(swing) -> dict:
 
 def add_context_lines(fig, profile):
     """
-    Aggiunge le linee chiave del Volume Profile con stili professionali stabili.
-    Sostituito 'bold=True' con famiglie di font pesanti (Arial Black) per compatibilità nativa.
+    Aggiunge le linee chiave del Volume Profile con stili stabili e compatibili.
     """
-    # POC (Point of Control) - Rosso continuo, evidenziato con Arial Black
+    # POC - Rosso continuo, evidenziato con Arial Black
     fig.add_hline(
         y=profile.poc,
         line_width=2,
@@ -59,7 +59,7 @@ def add_context_lines(fig, profile):
         annotation_font=dict(color="#EF5350", size=11, family="Arial Black")
     )
 
-    # VAH (Value Area High) - Tratteggiato scuro standard
+    # VAH - Tratteggiato scuro standard
     fig.add_hline(
         y=profile.vah,
         line_dash="dash",
@@ -70,7 +70,7 @@ def add_context_lines(fig, profile):
         annotation_font=dict(color="#78909C", size=10, family="Arial")
     )
 
-    # VAL (Value Area Low) - Tratteggiato scuro standard
+    # VAL - Tratteggiato scuro standard
     fig.add_hline(
         y=profile.val,
         line_dash="dash",
@@ -99,7 +99,7 @@ def add_volume_profile(fig, profile):
             y=profile.prices,
             orientation="h",
             name="Volume Profile",
-            opacity=0.35,
+            opacity=0.30,
             marker=dict(color="#455A64"),
             xaxis="x2",
             hovertemplate="Prezzo: %{y:.2f}<br>Volume Relativo: %{x:.2f}<extra></extra>"
@@ -120,62 +120,57 @@ def create_chart(
     ema_period: int = 200
 ) -> go.Figure:
     """
-    Crea un grafico con focus incentrato sullo swing (+50 barre precedenti).
-    Spazio diviso: 78% Prezzo/Candele, 22% Volume Profile verticale sulla destra.
+    Crea un grafico completo mantenendo visibile lo storico fino alla candela corrente.
+    Lo swing viene tracciato seguendo la curva dei prezzi reali tra i due pivot.
     """
-    
-    if swing:
-        start_idx = max(0, swing.start_pos - 50)
-        view_df = df.iloc[start_idx : swing.end_pos + 1].copy()
-    else:
-        view_df = df.copy()
-
     fig = go.Figure()
 
-    # 1. Candlestick (Asse X standard)
+    # 1. Candlestick completo (Mantiene asse temporale coerente e totale)
     fig.add_trace(
         go.Candlestick(
-            x=view_df.index,
-            open=view_df["Open"],
-            high=view_df["High"],
-            low=view_df["Low"],
-            close=view_df["Close"],
+            x=df.index,
+            open=df["Open"],
+            high=df["High"],
+            low=df["Low"],
+            close=df["Close"],
             name="Price",
             increasing_line_color="#26A69A", 
             decreasing_line_color="#EF5350"
         )
     )
 
-    # 2. EMA (Calcolata sul df globale per accuratezza, visualizzata sul df tagliato)
-    ema_global = calculate_ema(df, ema_period)
+    # 2. EMA su intero tracciato
+    ema = calculate_ema(df, ema_period)
     fig.add_trace(
         go.Scatter(
-            x=view_df.index,
-            y=ema_global.loc[view_df.index],
+            x=df.index,
+            y=ema,
             name=f"EMA {ema_period}",
             mode="lines",
             line=dict(color="#2196F3", width=1.5)
         )
     )
 
-    # 3. Linea Macro Swing Grafica
+    # 3. Macro Swing mappato sull'andamento continuo dei prezzi reali
     if swing:
+        # Estrazione della fetta di dati racchiusa nello swing per mappare l'andamento continuo
+        swing_slice = df.loc[swing.start_index : swing.end_index]
+        
         fig.add_trace(
             go.Scatter(
-                x=[swing.start_index, swing.end_index],
-                y=[swing.start_price, swing.end_price],
-                mode="lines+markers",
-                name="Macro Swing",
+                x=swing_slice.index,
+                y=swing_slice["Close"],
+                mode="lines",
+                name="Macro Swing Structure",
                 line=dict(color="#FF9800", width=3.5),
-                marker=dict(size=8, color="#FB8C00")
             )
         )
 
-    # 4. Livelli del Volume Profile (POC, VAH, VAL) via add_context_lines
+    # 4. Livelli del Volume Profile (POC, VAH, VAL)
     if profile:
         add_context_lines(fig, profile)
 
-    # 5. Estensione Livelli Fibonacci (Puliti da bold=True)
+    # 5. Livelli Fibonacci
     if swing and show_fibonacci:
         fibs = fibonacci_levels(swing)
         for name, price in fibs.items():
@@ -193,22 +188,34 @@ def create_chart(
     if profile and show_volume_profile:
         add_volume_profile(fig, profile)
 
-    # 7. Layout con 2 Assi Ordinati
+    # Cuscinetto protettivo a destra (Evita sovrapposizioni grafiche tra barre e volume profile)
+    end_date_buffered = df.index[-1] + timedelta(days=5)
+
+    # 7. Layout finale ad alta risoluzione (Fissato a 950px, autosize abilitato)
     fig.update_layout(
         title=dict(
             text="POC Macro Swing & Market Structure Analysis",
             font=dict(size=18, family="Arial Black")
         ),
-        height=900,
+        height=950,
+        autosize=True,
         template="plotly_white",
         hovermode="x unified",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         
+        margin=dict(
+            l=50,
+            r=80,
+            t=50,
+            b=50
+        ),
+        
         xaxis=dict(
             domain=[0, 0.78],
             rangeslider_visible=False,
-            title="Data"
+            title="Data",
+            range=[df.index[0], end_date_buffered]  # Forza la visualizzazione fino a oggi + buffer
         ),
         
         xaxis2=dict(
