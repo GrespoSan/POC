@@ -1,11 +1,3 @@
-"""
-data.py
-=======
-
-Modulo per il caricamento e la sanitizzazione dei dati storici azionari
-tramite l'API di Yahoo Finance (yfinance).
-"""
-
 from __future__ import annotations
 
 import pandas as pd
