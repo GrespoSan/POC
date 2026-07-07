@@ -1,3 +1,11 @@
+"""
+zigzag.py
+=========
+
+Modulo per l'identificazione e la validazione strutturale dei macro swing 
+di mercato basati su indicatori di volatilità (ATR) e scoring pesato.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,7 +23,7 @@ import math
 @dataclass
 class Pivot:
     """
-    Singolo pivot.
+    Rappresentazione di un singolo punto di inversione (Pivot).
     """
     index: pd.Timestamp
     position: int
@@ -26,52 +34,48 @@ class Pivot:
 @dataclass
 class Swing:
     """
-    Macro Swing.
+    Rappresentazione di un movimento direzionale (Macro Swing).
     """
     start: Pivot
     end: Pivot
-    direction: str     # MODIFICA 1: "UP" / "DOWN" / "SIDE"
+    direction: str     # "UP" / "DOWN" / "SIDE"
     move_pct: float
     bars: int
     score: float = 0.0
     atr_ratio: float = 0.0
 
     @property
-    def start_pos(self):
+    def start_pos(self) -> int:
         return self.start.position
 
     @property
-    def end_pos(self):
+    def end_pos(self) -> int:
         return self.end.position
 
     @property
-    def start_price(self):
+    def start_price(self) -> float:
         return self.start.price
 
     @property
-    def end_price(self):
+    def end_price(self) -> float:
         return self.end.price
 
     @property
-    def start_index(self):
+    def start_index(self) -> pd.Timestamp:
         return self.start.index
 
     @property
-    def end_index(self):
+    def end_index(self) -> pd.Timestamp:
         return self.end.index
 
     def data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Restituisce il DataFrame relativo allo swing.
-        Fondamentale per il calcolo del Volume Profile.
+        Estrae la porzione di DataFrame inclusa tra l'inizio e la fine dello swing.
         """
         return df.iloc[self.start.position:self.end.position + 1].copy()
 
     @property
     def length(self) -> int:
-        """
-        Numero di barre comprese nello swing.
-        """
         return self.end.position - self.start.position + 1
 
     @property
@@ -101,12 +105,12 @@ class Swing:
 
 
 # ==========================================================
-# ATR
+# MATHEMATICAL UTILITIES
 # ==========================================================
 
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """
-    Calcolo ATR classico.
+    Calcola l'Average True Range (ATR) classico per la misurazione della volatilità.
     """
     high = df["High"]
     low = df["Low"]
@@ -121,21 +125,15 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         axis=1
     ).max(axis=1)
 
-    atr = tr.rolling(period).mean()
-    return atr
+    return tr.rolling(period).mean()
 
-
-# ==========================================================
-# Utility
-# ==========================================================
 
 def movement_percent(a: float, b: float) -> float:
     if a == 0:
         return 0.0
-    return abs(b - a) / abs(a) * 100
+    return (abs(b - a) / a) * 100
 
 
-# MODIFICA 1: Direzione con soglia per evitare falsi macro swing
 def swing_direction(start_price: float, end_price: float, threshold: float = 0.1) -> str:
     if start_price == 0:
         return "SIDE"
@@ -154,29 +152,29 @@ def clamp(value, low, high):
 
 
 def normalize(value, min_value, max_value):
+    # CORREZIONE: Se i valori coincidono (es. un solo swing), il punteggio deve essere massimo (1.0)
     if max_value == min_value:
-        return 0.0
+        return 1.0
     return (value - min_value) / (max_value - min_value)
 
 
 def exponential_recency(position: int, total: int, alpha: float = 3.0) -> float:
     """
-    Restituisce un peso di recenza compreso tra 0 e 1.
+    Assegna un moltiplicatore di peso (0.0 - 1.0) basato sulla vicinanza temporale.
     """
     if total <= 1:
         return 1.0
-
     x = position / (total - 1)
     return (math.exp(alpha * x) - 1) / (math.exp(alpha) - 1)
 
 
 # ==========================================================
-# FILTRO DUPLICATI
+# FILTERS
 # ==========================================================
 
 def remove_duplicate_pivots(pivots: List[Pivot]) -> List[Pivot]:
     """
-    Elimina pivot consecutivi dello stesso tipo, mantenendo il più estremo.
+    Elimina i pivot consecutivi appartenenti allo stesso tipo, isolando l'estremo reale.
     """
     if len(pivots) < 2:
         return pivots
@@ -207,7 +205,7 @@ def remove_duplicate_pivots(pivots: List[Pivot]) -> List[Pivot]:
 
 class PivotDetector:
     """
-    Individua i pivot (massimi/minimi locali) all'interno di un DataFrame OHLC.
+    Esamina lo storico prezzi alla ricerca di massimi e minimi locali significativi.
     """
     def __init__(
         self,
@@ -228,6 +226,7 @@ class PivotDetector:
     def detect(self) -> List[Pivot]:
         pivots = []
 
+        # Scansione della finestra mobile escludendo i margini esterni
         for i in range(self.window, len(self.df) - self.window):
             if self._is_pivot_high(i):
                 pivots.append(
@@ -248,7 +247,9 @@ class PivotDetector:
                     )
                 )
 
+        # Applica prima la rimozione dei duplicati grezzi dello stesso tipo
         pivots = remove_duplicate_pivots(pivots)
+        # Filtra le oscillazioni insignificanti (rumore monetario) rispetto all'ATR
         pivots = self._filter_noise(pivots)
         return pivots
 
@@ -265,9 +266,6 @@ class PivotDetector:
         return value < left.min() and value < right.min()
 
     def _filter_noise(self, pivots: List[Pivot]) -> List[Pivot]:
-        """
-        Elimina gli swing troppo piccoli rispetto all'ATR con soglia dinamica.
-        """
         if len(pivots) < 2:
             return pivots
 
@@ -280,18 +278,26 @@ class PivotDetector:
             if pd.isna(atr) or atr <= 0:
                 continue
 
+            # CORREZIONE: Applica il filtro della distanza ATR solo se sono pivot alternati.
+            # Se per rumore strutturale sono dello stesso tipo, mantieni l'alternanza logica.
+            if pivot.kind == last.kind:
+                if pivot.kind == "high" and pivot.price > last.price:
+                    filtered[-1] = pivot
+                elif pivot.kind == "low" and pivot.price < last.price:
+                    filtered[-1] = pivot
+                continue
+
             distance = abs(pivot.price - last.price)
             ratio = distance / atr
 
-            # MODIFICA 2: Filtro ATR dinamico (High -> Low richiede meno sforzo strutturale)
             dynamic_ratio = self.min_atr_ratio
             if pivot.kind != last.kind:
-                dynamic_ratio *= 0.8
+                dynamic_ratio *= 0.8  # Agevola le transizioni strutturali pulite
 
             if ratio >= dynamic_ratio:
                 filtered.append(pivot)
 
-        return filtered
+        return remove_duplicate_pivots(filtered)
 
 
 # ==========================================================
@@ -300,7 +306,7 @@ class PivotDetector:
 
 class SwingBuilder:
     """
-    Costruisce gli swing partendo da una lista di Pivot.
+    Genera segmenti d'onda vettoriali unendo i nodi pivot validati.
     """
     def __init__(self, pivots: List[Pivot]):
         self.pivots = pivots
@@ -339,7 +345,7 @@ class SwingBuilder:
 
 class MacroSwingDetector:
     """
-    Seleziona il miglior swing tramite scoring bilanciato sulla recenza.
+    Valuta e classifica la rilevanza dei movimenti per estrarre l'onda primaria.
     """
     def __init__(self, df: pd.DataFrame, swings: List[Swing], atr: pd.Series):
         self.df = df
@@ -354,8 +360,7 @@ class MacroSwingDetector:
         self._compute_atr_ratio()
         self._score()
 
-        best = max(self.swings, key=lambda s: s.score)
-        return best
+        return max(self.swings, key=lambda s: s.score)
 
     def _compute_atr_ratio(self):
         for swing in self.swings:
@@ -376,10 +381,6 @@ class MacroSwingDetector:
         bar_values = [s.bars for s in self.swings]
         atr_values = [s.atr_ratio for s in self.swings]
 
-        # MODIFICA 4: Prevenzione potenziale bug su mercati illiquidi / flat (Edge case)
-        if max(atr_values) == 0:
-            atr_values = [1.0 for _ in atr_values]
-
         min_move, max_move = min(move_values), max(move_values)
         min_bar, max_bar = min(bar_values), max(bar_values)
         min_atr, max_atr = min(atr_values), max(atr_values)
@@ -392,7 +393,7 @@ class MacroSwingDetector:
             atr_score = normalize(swing.atr_ratio, min_atr, max_atr)
             recency = exponential_recency(i, total)
 
-            # MODIFICA 3: Sbilanciamento dello scoring sulla recenza (30%)
+            # Sistema di ponderazione bilanciato: 35% Ampiezza, 25% Volatilità, 10% Durata, 30% Recenza
             swing.score = (
                 move_score * 35.0 +
                 atr_score * 25.0 +
@@ -410,10 +411,10 @@ def detect_macro_swing(
     window: int = 5,
     atr_period: int = 14,
     min_atr_ratio: float = 1.5,
-    min_score: float = 40.0
+    min_score: float = 20.0  # Abbassato leggermente il filtro per evitare scarti iper-conservativi
 ) -> Optional[Swing]:
     """
-    Individua il miglior Macro Swing.
+    Punto di accesso principale per identificare il miglior Macro Swing strutturale del grafico.
     """
     if df is None or df.empty:
         return None
@@ -456,26 +457,25 @@ def detect_macro_swing(
 
 
 # ==========================================================
-# TEST
+# TEST EXECUTABLE
 # ==========================================================
 
 if __name__ == "__main__":
     try:
         from data import load_ticker
-        df = load_ticker("AAPL", 500)
+        df_test = load_ticker("AAPL", 500)
         
-        swing = detect_macro_swing(df)
+        swing_result = detect_macro_swing(df_test)
 
-        if swing is None:
-            print("Nessun macro swing rilevante trovato.")
+        if swing_result is None:
+            print("Nessun macro swing strutturale rilevato con i parametri correnti.")
         else:
             print("\n" + "=" * 50)
-            print("ZIGZAG MACRO SWING OUTPUT")
+            print(" SYSTEM LOG: ZIGZAG MACRO SWING DETECTED")
             print("=" * 50)
-            
             import pprint
-            pprint.pprint(swing.summary())
+            pprint.pprint(swing_result.summary())
             print("=" * 50)
             
     except ImportError:
-        print("Sintassi OK. Modulo 'data' non trovato localmente.")
+        print("Sintassi OK. Modulo di caricamento 'data' non presente localmente.")
