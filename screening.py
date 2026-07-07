@@ -110,7 +110,7 @@ def analyze_ticker(
 def run_screening(
     tickers: List[str],
     loader: Callable[[str, int], pd.DataFrame],
-    lookback: int = 500,
+    lookback: int = 500,  # <-- AGGIUNTO E COORDINATO CON APP.PY
     swing_window: int = 5,
     atr_period: int = 14,
     min_atr_ratio: float = 1.5,
@@ -128,6 +128,7 @@ def run_screening(
 
     for i, ticker in enumerate(tickers):
         try:
+            # Passa correttamente il lookback al loader personalizzato
             df = loader(ticker, lookback)
 
             result = analyze_ticker(
@@ -152,42 +153,9 @@ def run_screening(
         return pd.DataFrame()
 
     output = pd.DataFrame(results)
-
     output = output.sort_values(
         by=["POC Distance %", "Score"],
         ascending=[True, False]
     )
-
     output.reset_index(drop=True, inplace=True)
     return output
-
-
-# ==========================================================
-# UTILITIES
-# ==========================================================
-
-def load_tickers(filename: str = "tickers.txt") -> List[str]:
-    try:
-        with open(filename, "r") as f:
-            return [
-                line.strip().upper()
-                for line in f
-                if line.strip()
-            ]
-    except FileNotFoundError:
-        return []
-
-
-if __name__ == "__main__":
-    from data import load_ticker
-
-    test_tickers = ["AAPL", "MSFT", "NVDA", "TSLA"]
-    
-    df_results = run_screening(
-        tickers=test_tickers,
-        loader=load_ticker,
-        lookback=500
-    )
-
-    print("\n--- RISULTATI SCREENING TEST ---")
-    print(df_results)
