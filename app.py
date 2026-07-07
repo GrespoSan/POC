@@ -86,7 +86,9 @@ if "results" in st.session_state:
         st.warning("Nessun titolo trovato")
     else:
         st.subheader("Risultati Screening")
-        st.dataframe(results, use_container_width=True, height=400)
+        
+        # AGGIORNAMENTO: Sostituito `use_container_width=True` con `width="stretch"`
+        st.dataframe(results, width="stretch", height=400)
 
         st.download_button(
             label="📥 Esporta CSV",
@@ -108,7 +110,9 @@ if "results" in st.session_state:
                 swing_df = swing.data(df)
                 profile = calculate_volume_profile(swing_df)
                 fig = create_chart(df, swing, profile, ema_period=ema_period)
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # AGGIORNAMENTO: Sostituito `use_container_width=True` con `width="stretch"`
+                st.plotly_chart(fig, width="stretch")
 
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Trend", swing.direction)
