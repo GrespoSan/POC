@@ -124,8 +124,8 @@ if st.button("🚀 Avvia Screener"):
         status.write(f"Analisi completata: {int(value*100)}%")
 
     with st.spinner("Analisi titoli in corso..."):
-        # CORREZIONE DEFINITIVA: Mappatura esplicita tramite keyword arguments.
-        # Questo impedisce i conflitti di firma legati allo slittamento dei parametri.
+        # CORREZIONE: Esplicitiamo i nomi dei parametri per evitare 
+        # lo slittamento posizionale che causava il TypeError
         results = run_screening(
             tickers=tickers,
             loader=load_ticker,
