@@ -1,14 +1,3 @@
-"""
-zigzag.py
-==========
-
-Rilevamento automatico del Macro Swing ottimizzato per Volume Profile.
-
-Workflow
-detect_macro_swing() -> PivotDetector -> remove_duplicate_pivots -> ATR noise filter
-                     -> SwingBuilder -> Swing scoring -> BEST MACRO SWING
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

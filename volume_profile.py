@@ -1,36 +1,3 @@
-```python
-"""
-volume_profile.py
-=================
-
-Calcolo Volume Profile sul Macro Swing.
-
-Workflow
-
-Swing.data()
-
-        │
-        ▼
-
-Price Binning
-
-        │
-        ▼
-
-Volume Aggregation
-
-        │
-        ▼
-
-POC / VAH / VAL
-
-        │
-        ▼
-
-Volume Profile Result
-"""
-
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -520,4 +487,3 @@ if __name__ == "__main__":
             "VAH:",
             round(profile.vah,2)
         )
-```

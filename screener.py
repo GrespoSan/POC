@@ -1,41 +1,3 @@
-```python
-"""
-screening.py
-============
-
-Motore principale dello screener POC.
-
-Workflow
-
-Ticker List
-
-    |
-    ▼
-
-Load OHLCV
-
-    |
-    ▼
-
-Macro Swing Detection
-
-    |
-    ▼
-
-Volume Profile
-
-    |
-    ▼
-
-POC Distance Filter
-
-    |
-    ▼
-
-Ranking Results
-"""
-
-
 from __future__ import annotations
 
 
@@ -447,4 +409,4 @@ if __name__ == "__main__":
     print(
         df
     )
-```
+

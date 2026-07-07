@@ -1,43 +1,3 @@
-```python
-"""
-app.py
-======
-
-POC Macro Swing Screener
-
-Streamlit dashboard.
-
-Workflow
-
-tickers.txt
-
-      |
-      ▼
-
-screening.py
-
-      |
-      ▼
-
-Results Table
-
-      |
-      ▼
-
-Ticker Selection
-
-      |
-      ▼
-
-charts.py
-
-      |
-      ▼
-
-Interactive Chart
-"""
-
-
 from __future__ import annotations
 
 
@@ -507,4 +467,4 @@ if "results" in st.session_state:
                     f"{swing.score:.1f}"
 
                 )
-```
+

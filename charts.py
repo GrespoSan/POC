@@ -1,38 +1,3 @@
-```python
-"""
-charts.py
-=========
-
-Grafici avanzati per POC Screener.
-
-Include:
-
-- Candlestick
-- Macro Swing
-- Volume Profile
-- POC
-- Value Area
-- EMA200
-- Fibonacci
-
-
-Workflow
-
-
-DataFrame OHLCV
-
-        |
-        ▼
-
-Plotly Figure
-
-        |
-        ▼
-
-Streamlit Chart
-"""
-
-
 from __future__ import annotations
 
 
@@ -469,4 +434,3 @@ if __name__ == "__main__":
 
 
         fig.show()
-```
