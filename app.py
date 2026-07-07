@@ -124,17 +124,17 @@ if st.button("🚀 Avvia Screener"):
         status.write(f"Analisi completata: {int(value*100)}%")
 
     with st.spinner("Analisi titoli in corso..."):
-        # CORREZIONE: Chiamata posizionale standard. L'ordine segue l'algoritmo
-        # di screening sequenziale (tickers, loader, lookback, parametri, callback)
+        # CORREZIONE DEFINITIVA: Mappatura esplicita tramite keyword arguments.
+        # Questo impedisce i conflitti di firma legati allo slittamento dei parametri.
         results = run_screening(
-            tickers,
-            load_ticker,
-            lookback, 
-            swing_window,
-            atr_period,
-            min_atr_ratio,
-            poc_tolerance,
-            update_progress
+            tickers=tickers,
+            loader=load_ticker,
+            lookback=lookback, 
+            swing_window=swing_window,
+            atr_period=atr_period,
+            min_atr_ratio=min_atr_ratio,
+            poc_tolerance=poc_tolerance,
+            progress_callback=update_progress
         )
 
     st.session_state.results = results
