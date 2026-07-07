@@ -1,11 +1,3 @@
-"""
-charts.py
-==========
-
-Rendering grafico professionale con asse X secondario sovrapposto per il Volume Profile.
-Focus incentrato sul Macro Swing selezionato per evitare distorsioni visive.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -54,21 +46,20 @@ def fibonacci_levels(swing) -> dict:
 
 def add_context_lines(fig, profile):
     """
-    Aggiunge le linee chiave del Volume Profile con stili professionali:
-    - POC: Linea continua Rossa spessa.
-    - VAH/VAL: Linee tratteggiate Grigio/Nere.
+    Aggiunge le linee chiave del Volume Profile con stili professionali stabili.
+    Sostituito 'bold=True' con famiglie di font pesanti (Arial Black) per compatibilità nativa.
     """
-    # POC (Point of Control) - Rosso continuo ben visibile
+    # POC (Point of Control) - Rosso continuo, evidenziato con Arial Black
     fig.add_hline(
         y=profile.poc,
         line_width=2,
         line_color="#EF5350",
         annotation_text="POC",
         annotation_position="top left",
-        annotation_font=dict(color="#EF5350", size=11, bold=True)
+        annotation_font=dict(color="#EF5350", size=11, family="Arial Black")
     )
 
-    # VAH (Value Area High) - Tratteggiato scuro
+    # VAH (Value Area High) - Tratteggiato scuro standard
     fig.add_hline(
         y=profile.vah,
         line_dash="dash",
@@ -76,10 +67,10 @@ def add_context_lines(fig, profile):
         line_color="#78909C",
         annotation_text="VAH",
         annotation_position="top left",
-        annotation_font=dict(color="#78909C", size=10)
+        annotation_font=dict(color="#78909C", size=10, family="Arial")
     )
 
-    # VAL (Value Area Low) - Tratteggiato scuro
+    # VAL (Value Area Low) - Tratteggiato scuro standard
     fig.add_hline(
         y=profile.val,
         line_dash="dash",
@@ -87,7 +78,7 @@ def add_context_lines(fig, profile):
         line_color="#78909C",
         annotation_text="VAL",
         annotation_position="bottom left",
-        annotation_font=dict(color="#78909C", size=10)
+        annotation_font=dict(color="#78909C", size=10, family="Arial")
     )
 
 
@@ -98,7 +89,6 @@ def add_context_lines(fig, profile):
 def add_volume_profile(fig, profile):
     """
     Disegna Volume Profile su un asse X secondario (xaxis2) sovrapposto sulla destra.
-    Evita il bug dello schiacciamento temporale.
     """
     max_volume = profile.volumes.max()
     widths = profile.volumes / max_volume
@@ -111,7 +101,7 @@ def add_volume_profile(fig, profile):
             name="Volume Profile",
             opacity=0.35,
             marker=dict(color="#455A64"),
-            xaxis="x2",  # Mappato esplicitamente sul secondo asse X
+            xaxis="x2",
             hovertemplate="Prezzo: %{y:.2f}<br>Volume Relativo: %{x:.2f}<extra></extra>"
         )
     )
@@ -134,7 +124,6 @@ def create_chart(
     Spazio diviso: 78% Prezzo/Candele, 22% Volume Profile verticale sulla destra.
     """
     
-    # Ritaglio del frame per il focus visivo richiesto
     if swing:
         start_idx = max(0, swing.start_pos - 50)
         view_df = df.iloc[start_idx : swing.end_pos + 1].copy()
@@ -182,11 +171,11 @@ def create_chart(
             )
         )
 
-    # 4. Livelli del Volume Profile (POC, VAH, VAL)
+    # 4. Livelli del Volume Profile (POC, VAH, VAL) via add_context_lines
     if profile:
         add_context_lines(fig, profile)
 
-    # 5. Estensione Livelli Fibonacci
+    # 5. Estensione Livelli Fibonacci (Puliti da bold=True)
     if swing and show_fibonacci:
         fibs = fibonacci_levels(swing)
         for name, price in fibs.items():
@@ -197,18 +186,18 @@ def create_chart(
                 line_color="#B0BEC5",
                 annotation_text=f"Fib {name}",
                 annotation_position="bottom right",
-                annotation_font=dict(color="#90A4AE", size=9)
+                annotation_font=dict(color="#90A4AE", size=9, family="Arial")
             )
 
     # 6. Tracciamento Volume Profile Orizzontale a destra
     if profile and show_volume_profile:
         add_volume_profile(fig, profile)
 
-    # 7. Layout con 2 Assi Ordinati (Prezzo 0-78% della larghezza, Volumi 78-100%)
+    # 7. Layout con 2 Assi Ordinati
     fig.update_layout(
         title=dict(
             text="POC Macro Swing & Market Structure Analysis",
-            font=dict(size=18, bold=True)
+            font=dict(size=18, family="Arial Black")
         ),
         height=900,
         template="plotly_white",
@@ -216,14 +205,12 @@ def create_chart(
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         
-        # Asse principale (Candele)
         xaxis=dict(
             domain=[0, 0.78],
             rangeslider_visible=False,
             title="Data"
         ),
         
-        # Asse secondario indipendente sovrapposto per il Volume Profile
         xaxis2=dict(
             domain=[0.78, 1],
             overlaying="y",
@@ -242,10 +229,3 @@ def create_chart(
     )
 
     return fig
-
-
-# ==========================================================
-# TEST DI SINTASSI
-# ==========================================================
-if __name__ == "__main__":
-    print("Modulo 'charts.py' compilato con successo con assi X indipendenti ed ottimizzati.")
