@@ -1,3 +1,12 @@
+"""
+charts.py
+==========
+
+Rendering grafico professionale stile TradingView.
+Il Volume Profile viene renderizzato a destra della candela corrente sul grafico principale,
+e il POC si estende dall'inizio dello swing fino all'ultima seduta di mercato.
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -45,66 +54,91 @@ def fibonacci_levels(swing) -> dict:
 # HORIZONTAL LINES STYLING
 # ==========================================================
 
-def add_context_lines(fig, profile):
+def add_context_lines(fig, profile, swing, last_date):
     """
-    Aggiunge le linee chiave del Volume Profile con stili stabili e compatibili.
+    Aggiunge le linee chiave del Volume Profile stile TradingView.
+    Il POC viene disegnato come una shape lineare che parte dallo swing e arriva a oggi.
+    VAH e VAL seguono lo stesso principio per pulizia grafica.
     """
-    # POC - Rosso continuo, evidenziato con Arial Black
-    fig.add_hline(
+    # POC dinamico (da inizio swing a oggi)
+    fig.add_shape(
+        type="line",
+        x0=swing.start_index,
+        x1=last_date,
+        y0=profile.poc,
+        y1=profile.poc,
+        line=dict(color="#EF5350", width=3),
+    )
+    
+    # Etichetta testo per il POC
+    fig.add_annotation(
+        x=swing.start_index,
         y=profile.poc,
-        line_width=2,
-        line_color="#EF5350",
-        annotation_text="POC",
-        annotation_position="top left",
-        annotation_font=dict(color="#EF5350", size=11, family="Arial Black")
+        text="POC",
+        xref="x",
+        yref="y",
+        showarrow=False,
+        xanchor="left",
+        yanchor="bottom",
+        font=dict(color="#EF5350", size=11, family="Arial Black")
     )
 
-    # VAH - Tratteggiato scuro standard
-    fig.add_hline(
-        y=profile.vah,
-        line_dash="dash",
-        line_width=1.5,
-        line_color="#78909C",
-        annotation_text="VAH",
-        annotation_position="top left",
-        annotation_font=dict(color="#78909C", size=10, family="Arial")
+    # VAH Linea segmentata
+    fig.add_shape(
+        type="line",
+        x0=swing.start_index,
+        x1=last_date,
+        y0=profile.vah,
+        y1=profile.vah,
+        line=dict(color="#78909C", width=1.5, dash="dash"),
     )
 
-    # VAL - Tratteggiato scuro standard
-    fig.add_hline(
-        y=profile.val,
-        line_dash="dash",
-        line_width=1.5,
-        line_color="#78909C",
-        annotation_text="VAL",
-        annotation_position="bottom left",
-        annotation_font=dict(color="#78909C", size=10, family="Arial")
+    # VAL Linea segmentata
+    fig.add_shape(
+        type="line",
+        x0=swing.start_index,
+        x1=last_date,
+        y0=profile.val,
+        y1=profile.val,
+        line=dict(color="#78909C", width=1.5, dash="dash"),
     )
 
 
 # ==========================================================
-# VOLUME PROFILE TRACE (X2 ASSE INDIPENDENTE)
+# VOLUME PROFILE TRACE (STILE TRADINGVIEW)
 # ==========================================================
 
-def add_volume_profile(fig, profile):
+def add_volume_profile(fig, profile, df):
     """
-    Disegna Volume Profile su un asse X secondario (xaxis2) sovrapposto sulla destra.
+    Disegna il Volume Profile sul lato destro vicino alla candela corrente,
+    proiettando le barre orizzontalmente nell'area del margine destro salvaguardato.
     """
     max_volume = profile.volumes.max()
     widths = profile.volumes / max_volume
 
-    fig.add_trace(
-        go.Bar(
-            x=widths,
-            y=profile.prices,
-            orientation="h",
-            name="Volume Profile",
-            opacity=0.30,
-            marker=dict(color="#455A64"),
-            xaxis="x2",
-            hovertemplate="Prezzo: %{y:.2f}<br>Volume Relativo: %{x:.2f}<extra></extra>"
+    # Calcoliamo lo spessore delle barre (altezza in prezzo del singolo bucket bin)
+    bin_width = profile.prices[1] - profile.prices[0] if len(profile.prices) > 1 else 1.0
+
+    # Base di posizionamento sull'asse delle date (subito dopo l'ultima candela disponibile)
+    last_date = df.index[-1]
+    
+    # Creiamo la proiezione delle barre aggiungendo giorni proporzionali al volume relativo
+    # 15 giorni rappresenta la massima estensione visiva sul grafico a destra della candela corrente
+    for price, width in zip(profile.prices, widths):
+        if width <= 0:
+            continue
+            
+        x_end = last_date + timedelta(days=int(width * 15))
+        
+        fig.add_shape(
+            type="rect",
+            x0=last_date,
+            x1=x_end,
+            y0=price - (bin_width / 2),
+            y1=price + (bin_width / 2),
+            fillcolor="rgba(0, 180, 180, 0.35)",
+            line=dict(width=0), # Rimuove il bordo per un look minimale e pulito
         )
-    )
 
 
 # ==========================================================
@@ -121,11 +155,11 @@ def create_chart(
 ) -> go.Figure:
     """
     Crea un grafico completo mantenendo visibile lo storico fino alla candela corrente.
-    Lo swing viene tracciato seguendo la curva dei prezzi reali tra i due pivot.
+    Il Volume Profile e i livelli chiave si integrano organicamente sul lato destro del trend.
     """
     fig = go.Figure()
 
-    # 1. Candlestick completo (Mantiene asse temporale coerente e totale)
+    # 1. Candlestick completo (Usa il dataframe completo)
     fig.add_trace(
         go.Candlestick(
             x=df.index,
@@ -139,7 +173,7 @@ def create_chart(
         )
     )
 
-    # 2. EMA su intero tracciato
+    # 2. EMA su tutto lo storico
     ema = calculate_ema(df, ema_period)
     fig.add_trace(
         go.Scatter(
@@ -151,11 +185,9 @@ def create_chart(
         )
     )
 
-    # 3. Macro Swing mappato sull'andamento continuo dei prezzi reali
+    # 3. Struttura del Macro Swing lungo il prezzo reale
     if swing:
-        # Estrazione della fetta di dati racchiusa nello swing per mappare l'andamento continuo
         swing_slice = df.loc[swing.start_index : swing.end_index]
-        
         fig.add_trace(
             go.Scatter(
                 x=swing_slice.index,
@@ -166,9 +198,9 @@ def create_chart(
             )
         )
 
-    # 4. Livelli del Volume Profile (POC, VAH, VAL)
-    if profile:
-        add_context_lines(fig, profile)
+    # 4. Livelli e POC stile TradingView (Da inizio swing alla candela corrente)
+    if profile and swing:
+        add_context_lines(fig, profile, swing, df.index[-1])
 
     # 5. Livelli Fibonacci
     if swing and show_fibonacci:
@@ -184,14 +216,14 @@ def create_chart(
                 annotation_font=dict(color="#90A4AE", size=9, family="Arial")
             )
 
-    # 6. Tracciamento Volume Profile Orizzontale a destra
+    # 6. Volume Profile sul margine destro del grafico principale
     if profile and show_volume_profile:
-        add_volume_profile(fig, profile)
+        add_volume_profile(fig, profile, df)
 
-    # Cuscinetto protettivo a destra (Evita sovrapposizioni grafiche tra barre e volume profile)
-    end_date_buffered = df.index[-1] + timedelta(days=5)
+    # Estendiamo lo spazio a destra dell'asse X per alloggiare visivamente il Volume Profile (18 giorni totali)
+    end_date_buffered = df.index[-1] + timedelta(days=18)
 
-    # 7. Layout finale ad alta risoluzione (Fissato a 950px, autosize abilitato)
+    # 7. Layout finale ad alta risoluzione a griglia unificata
     fig.update_layout(
         title=dict(
             text="POC Macro Swing & Market Structure Analysis",
@@ -206,26 +238,15 @@ def create_chart(
         
         margin=dict(
             l=50,
-            r=80,
-            t=50,
+            r=50,
+            t=60,
             b=50
         ),
         
         xaxis=dict(
-            domain=[0, 0.78],
             rangeslider_visible=False,
             title="Data",
-            range=[df.index[0], end_date_buffered]  # Forza la visualizzazione fino a oggi + buffer
-        ),
-        
-        xaxis2=dict(
-            domain=[0.78, 1],
-            overlaying="y",
-            side="top",
-            showgrid=False,
-            title="Volume Relativo",
-            ticks="",
-            showticklabels=False
+            range=[df.index[0], end_date_buffered]  # Mantiene visibile l'intero dataset + spazio volume profile
         ),
         
         yaxis=dict(
