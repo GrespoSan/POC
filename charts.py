@@ -58,7 +58,7 @@ def add_context_lines(fig, profile, swing, last_date):
         x1=last_date,
         y0=profile.poc,
         y1=profile.poc,
-        line=dict(color="#00897B", width=3),  # Verde acqua scuro stile TV
+        line=dict(color="red", width=3),  #00897B Verde acqua scuro stile TV
     )
     
     # Etichetta testo per il POC
