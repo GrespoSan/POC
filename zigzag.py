@@ -1,11 +1,3 @@
-"""
-zigzag.py
-=========
-
-Modulo per l'identificazione e la validazione strutturale dei macro swing 
-di mercato basati su indicatori di volatilità (ATR) e scoring pesato.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

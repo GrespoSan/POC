@@ -246,7 +246,19 @@ if __name__ == "__main__":
     # Test locale simulato su 500 candele standard
     df = load_ticker("AAPL", 500)
     swing = detect_macro_swing(df)
-
+    
+    # --- RIGHE INSERITE QUI ---
+    print("=" * 60)
+    print("INIZIO SWING :", swing.start_index if swing else "N/A")
+    print("FINE SWING   :", swing.end_index if swing else "N/A")
+    print("ULTIMA BARRA :", df.index[-1])
+    print()
+    print("Start position :", swing.start_pos if swing else "N/A")
+    print("End position   :", swing.end_pos if swing else "N/A")
+    print("Ultima barra   :", len(df) - 1)
+    print("=" * 60)
+    # --------------------------
+    
     if swing is None:
         print("Nessuno swing rilevato per il test.")
     else:
