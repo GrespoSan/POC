@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -7,36 +6,30 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import streamlit as st
-import plotly.graph_objects as o
+import plotly.graph_objects as go
 
 # ==========================================================
 # MAPPING TICKER TRADINGVIEW -> YAHOO FINANCE
 # ==========================================================
-# Yahoo Finance non riconosce la sintassi dei Future di TradingView (es. ETH1!).
-# Questo dizionario converte i simboli prima del download.
 TICKER_MAPPING = {
-    "ETH1!": "ETH-USD",  # Spot Crypto (consigliato su Yahoo per storici continui e volumi puliti)
-    "BTC1!": "BTC-USD",  # Spot Crypto
-    "ES1!": "ES=F",      # Future E-mini S&P 500
-    "NQ1!": "NQ=F",      # Future E-mini Nasdaq 100
-    "YM1!": "YM=F",      # Future Dow Jones
-    "RTY1!": "RTY=F",    # Future Russell 2000
-    "GC1!": "GC=F",      # Future Gold
-    "CL1!": "CL=F",      # Future Crude Oil
+    "ETH1!": "ETH-USD",  
+    "BTC1!": "BTC-USD",  
+    "ES1!": "ES=F",      
+    "NQ1!": "NQ=F",      
+    "GC1!": "GC=F",      
+    "CL1!": "CL=F",      
 }
 
 def get_yahoo_ticker(ticker: str) -> str:
-    """Restituisce il ticker corretto per Yahoo Finance."""
     return TICKER_MAPPING.get(ticker.upper().strip(), ticker)
 
 
 # ==========================================================
-# STRUTTURE DATI (DATACLASSES)
+# DATACLASSES RIGIDAMENTE SEPARATE
 # ==========================================================
 
 @dataclass
 class VolumeProfile:
-    """Risultato del calcolo del Volume Profile."""
     prices: np.ndarray
     volumes: np.ndarray
     poc: float
@@ -50,19 +43,10 @@ class VolumeProfile:
 
 
 @dataclass
-class PivotPoint:
-    """Rappresenta un punto di pivot (Massimo o Minimo)."""
-    index: any
-    position: int
-    price: float
-    is_high: bool
-
-
-@dataclass
 class Swing:
     """
-    Rappresenta un movimento Macro Swing individuato sul grafico.
-    Contiene gli indici temporali e le posizioni assolute (iloc).
+    Rappresenta ESCLUSIVAMENTE la struttura geometrica dello swing rilevato.
+    È totalmente indipendente dal Volume Profile.
     """
     start_index: any
     end_index: any
@@ -73,31 +57,28 @@ class Swing:
     is_up: bool
 
     def data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Estrazione classica limitata strettamente tra i due pivot."""
+        """Rappresenta lo swing puro (inizio -> fine swing). Usato per grafici/statistiche dello swing."""
         return df.iloc[self.start_pos : self.end_pos + 1].copy()
 
-    def data_to_current(self, df: pd.DataFrame) -> pd.DataFrame:
+    def profile_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        LOGICA TRADINGVIEW: Estrae i dati dal pivot iniziale fino all'ultima
-        barra disponibile sul grafico (oggi), includendo lo storico recente nel VP.
+        Dati da usare per il Volume Profile Anchored (inizio swing -> OGGI).
+        Non modifica l'essenza dello swing originale.
         """
         return df.iloc[self.start_pos :].copy()
 
 
 # ==========================================================
-# LOGICA DI CALCOLO VOLUME PROFILE
+# MOTORE DI CALCOLO VOLUME PROFILE
 # ==========================================================
 
 def calculate_price_range(df: pd.DataFrame) -> tuple[float, float]:
     return float(df["Low"].min()), float(df["High"].max())
 
-
 def create_price_bins(low: float, high: float, bins: int) -> np.ndarray:
     return np.linspace(low, high, bins + 1)
 
-
 def distribute_volume(df: pd.DataFrame, price_bins: np.ndarray) -> np.ndarray:
-    """Distribuisce il volume geometricamente lungo il range High-Low di ogni candela."""
     profile = np.zeros(len(price_bins) - 1)
     highs = df["High"].values
     lows = df["Low"].values
@@ -124,14 +105,10 @@ def distribute_volume(df: pd.DataFrame, price_bins: np.ndarray) -> np.ndarray:
                 profile[i] += vol * fraction
     return profile
 
-
 def calculate_poc(volumes: np.ndarray, prices: np.ndarray) -> float:
     return float(prices[np.argmax(volumes)])
 
-
-def calculate_value_area(
-    prices: np.ndarray, volumes: np.ndarray, percentage: float = 0.70
-) -> tuple[float, float]:
+def calculate_value_area(prices: np.ndarray, volumes: np.ndarray, percentage: float = 0.70) -> tuple[float, float]:
     total_volume = volumes.sum()
     if total_volume <= 0:
         return float(prices[0]), float(prices[-1])
@@ -145,10 +122,8 @@ def calculate_value_area(
     while current_volume < target:
         left_volume = volumes[left] if left >= 0 else -1
         right_volume = volumes[right] if right < len(volumes) else -1
-
         if left_volume == -1 and right_volume == -1:
             break
-
         if left_volume >= right_volume and left_volume != -1:
             included.add(left)
             current_volume += volumes[left]
@@ -163,10 +138,7 @@ def calculate_value_area(
     low_idx, high_idx = min(included), max(included)
     return float(prices[low_idx]), float(prices[high_idx])
 
-
-def calculate_volume_profile(
-    df: pd.DataFrame, bins: int = 50, value_area: float = 0.70
-) -> Optional[VolumeProfile]:
+def calculate_volume_profile(df: pd.DataFrame, bins: int = 50, value_area: float = 0.70) -> Optional[VolumeProfile]:
     if df is None or df.empty:
         return None
     required = ["High", "Low", "Close", "Volume"]
@@ -189,18 +161,15 @@ def calculate_volume_profile(
 
 
 # ==========================================================
-# DETECT MACRO SWING SIMULATO (ZIGZAG AUTONOMO)
+# ALGORITMO RILEVAMENTO MACRO SWING
 # ==========================================================
-
 def detect_macro_swing(df: pd.DataFrame, window: int = 20, atr_period: int = 14, min_atr_ratio: float = 2.0) -> Optional[Swing]:
     """
-    Versione standalone semplificata di detect_macro_swing per garantire il funzionamento autonomo.
-    Identifica l'ultimo macro movimento basato sui massimi e minimi di periodo.
+    Rileva i macro swing basandosi esclusivamente sulle candele del DataFrame primario.
     """
     if len(df) < window * 2:
         return None
         
-    # Identificazione pivot grezzi di massima/minima di periodo nelle ultime battute
     high_peaks = []
     low_peaks = []
     
@@ -214,7 +183,7 @@ def detect_macro_swing(df: pd.DataFrame, window: int = 20, atr_period: int = 14,
             low_peaks.append((df.index[i], i, df['Low'].iloc[i]))
 
     if not high_peaks or not low_peaks:
-        # Fallback statico protettivo basato sul range massimo se non trova pivot geometrici puliti
+        # Fallback deterministico
         p1_idx, p2_idx = int(len(df) * 0.6), int(len(df) * 0.9)
         return Swing(
             start_index=df.index[p1_idx], end_index=df.index[p2_idx],
@@ -223,13 +192,11 @@ def detect_macro_swing(df: pd.DataFrame, window: int = 20, atr_period: int = 14,
             is_up=True
         )
 
-    # Prendi gli ultimi due strutturati per creare lo swing di test
     p1 = low_peaks[-1] if low_peaks[-1][1] < high_peaks[-1][1] else high_peaks[-1]
     p2 = high_peaks[-1] if p1[1] < high_peaks[-1][1] else low_peaks[-1]
     
-    if p1[1] >= p2[1]:
-        if len(low_peaks) > 1: p1 = low_peaks[-2]
-        else: return None
+    if p1[1] >= p2[1] and len(low_peaks) > 1:
+        p1 = low_peaks[-2]
 
     return Swing(
         start_index=p1[0], end_index=p2[0],
@@ -240,19 +207,16 @@ def detect_macro_swing(df: pd.DataFrame, window: int = 20, atr_period: int = 14,
 
 
 # ==========================================================
-# CARICAMENTO DATI DA YAHOO FINANCE
+# CARICAMENTO DATI
 # ==========================================================
-
 def load_ticker(ticker_name: str, lookback: int) -> pd.DataFrame:
-    """Scarica dati storici puliti applicando il corretto mappaggio dei ticker."""
     yahoo_symbol = get_yahoo_ticker(ticker_name)
     periodo = "1mo" if lookback <= 30 else "3mo" if lookback <= 90 else "1y" if lookback <= 365 else "max"
     
     df = yf.download(yahoo_symbol, period=periodo, interval="1d")
     if df.empty:
-        raise ValueError(f"Nessun dato restituito da Yahoo Finance per il simbolo: {yahoo_symbol}")
+        raise ValueError(f"Nessun dato per il simbolo: {yahoo_symbol}")
     
-    # Pulizia colonne multi-index se presenti nel nuovo formato yfinance
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
         
@@ -260,41 +224,43 @@ def load_ticker(ticker_name: str, lookback: int) -> pd.DataFrame:
 
 
 # ==========================================================
-# GRAFICA GENERATIVA (PLOTLY)
+# GRAFICA PLOTLY (UTILIZZA I SEGMENTI SEPARATI CORRETTI)
 # ==========================================================
-
-def create_chart(df: pd.DataFrame, swing: Swing, profile: VolumeProfile, ema_period: int = 21) -> o.Figure:
-    fig = o.Figure()
+def create_chart(df: pd.DataFrame, swing: Swing, profile: VolumeProfile) -> go.Figure:
+    fig = go.Figure()
     
-    # Candlestick principale
-    fig.add_trace(o.Candlestick(
+    # Grafico Candlestick completo
+    fig.add_trace(go.Candlestick(
         x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-        name="Prezzo", opacity=0.4
+        name="Prezzo", opacity=0.3
     ))
     
-    # Ema di controllo
-    df['EMA'] = df['Close'].ewm(span=ema_period, adjust=False).mean()
-    fig.add_trace(o.Scatter(x=df.index, y=df['EMA'], line=dict(color='orange', width=1.5), name=f"EMA {ema_period}"))
+    # GRAFICO SWING: Segmento reale (inizio -> fine) richiesto per la visualizzazione grafica dello swing
+    swing_slice = df.loc[swing.start_index : swing.end_index]
+    fig.add_trace(go.Scatter(
+        x=[swing.start_index, swing.end_index],
+        y=[swing.start_price, swing.end_price],
+        line=dict(color='magenta', width=3),
+        mode='lines+markers',
+        name="Macro Swing Reale"
+    ))
 
-    if profile and swing:
-        # Estendiamo visivamente le linee del profilo da start_index fino a oggi (df.index[-1])
+    # GRAFICO VOLUME PROFILE: Proiettato dall'ancora iniziale (start_index) fino a OGGI (df.index[-1])
+    if profile:
         x_start = swing.start_index
         x_end = df.index[-1]
         
-        # Linea POC
-        fig.add_trace(o.Scatter(
+        fig.add_trace(go.Scatter(
             x=[x_start, x_end], y=[profile.poc, profile.poc],
-            line=dict(color='red', width=2.5, dash='solid'), name=f"POC: {profile.poc:.2f}"
+            line=dict(color='red', width=2.5), name=f"Anchored POC: {profile.poc:.2f}"
         ))
-        # Linea VAH
-        fig.add_trace(o.Scatter(
+        fig.add_trace(go.Scatter(
             x=[x_start, x_end], y=[profile.vah, profile.vah],
-            line=dict(color='cyan', width=1.5, dash='dash'), name=f"VAH: {profile.vah:.2f}"
+            line=dict(color='cyan', width=1.5, dash='dash'), name=f"Anchored VAH: {profile.vah:.2f}"
         ))
-        # Linea VAL
-        fig.add_trace(o.Scatter(
+        fig.add_trace(go.Scatter(
             x=[x_start, x_end], y=[profile.val, profile.val],
-            line=dict(color='cyan', width=1.5, dash='dash'), name=f"VAL: {profile.val:.2f}"
+            line=dict(color='cyan', width=1.5, dash='dash'), name=f"Anchored VAL: {profile.val:.2f}"
         ))
 
     fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_dark", height=600)
@@ -302,72 +268,48 @@ def create_chart(df: pd.DataFrame, swing: Swing, profile: VolumeProfile, ema_per
 
 
 # ==========================================================
-# CORE APP / STREAMLIT RENDER (APP.PY)
+# FLUSSO APPLICATIVO INTERFACCIA
 # ==========================================================
-
 def main():
     st.set_page_config(layout="wide")
-    st.title("Macro Swing & Anchored Volume Profile (TV-Style)")
+    st.title("Disaccoppiamento Strutturale: Swing vs Volume Profile")
 
-    # Sidebar controlli parametri
-    st.sidebar.header("Parametri Configurazione")
-    selected = st.sidebar.text_input("Inserisci Simbolo (es. ETH1!, BTC1!, ES1!, AAPL)", value="ETH1!")
-    lookback = st.sidebar.slider("Lookback Candele", min_value=50, max_value=1000, value=300)
-    
-    swing_window = st.sidebar.slider("Finestra Swing (Pivot)", 5, 50, 20)
-    atr_period = st.sidebar.slider("Periodo ATR", 5, 30, 14)
-    min_atr_ratio = st.sidebar.slider("Min ATR Ratio", 0.5, 5.0, 2.0, step=0.1)
-    ema_period = st.sidebar.slider("Periodo EMA", 10, 200, 21)
+    selected = st.sidebar.text_input("Simbolo", value="ETH1!")
+    lookback = st.sidebar.slider("Lookback", 50, 1000, 300)
+    swing_window = st.sidebar.slider("Finestra Swing", 5, 50, 20)
 
     try:
-        # Caricamento e computazione
         df = load_ticker(selected, lookback)
         
-        swing = detect_macro_swing(
-            df,
-            window=swing_window,
-            atr_period=atr_period,
-            min_atr_ratio=min_atr_ratio
-        )
+        # 1. Lo Swing viene calcolato e rimane immutabile
+        swing = detect_macro_swing(df, window=swing_window)
 
         if swing is None:
-            st.warning("Macro Swing non disponibile con i parametri attuali.")
+            st.warning("Nessun macro swing rilevato.")
         else:
-            # ----------------=======================================
-            # BLOCCO TEMPORANEO DI SEVERO DEBUG (STREAMLIT NATIVE)
-            # ----------------=======================================
-            st.write("### 🔍 SEZIONE DI DEBUG POSIZIONAMENTO & COPERTURA VOLUMI")
-            
-            c1, c2 = st.columns(2)
+            # 2. Generiamo il profilo usando ESCLUSIVAMENTE la nuova funzione dedicata
+            profile_df = swing.profile_data(df)
+            profile = calculate_volume_profile(profile_df)
+
+            # Debug di convalida strutturale
+            st.write("### 🔍 VALIDAZIONE SEPARAZIONE FLUSSI")
+            c1, c2, c3 = st.columns(3)
             with c1:
-                st.metric(label="Inizio Swing (Data/Index)", value=str(swing.start_index))
-                st.metric(label="Fine Swing (Data/Index)", value=str(swing.end_index))
-                st.metric(label="Ultima Candela Totale DF", value=str(df.index[-1]))
+                st.metric("Lunghezza Swing Reale (Barre)", len(swing.data(df)))
+                st.write(f"Segmento: `{swing.start_index}` ➔ `{swing.end_index}`")
             with c2:
-                st.metric(label="Start Position Absolute (iloc)", value=int(swing.start_pos))
-                st.metric(label="End Position Absolute (iloc)", value=int(swing.end_pos))
-                st.metric(label="Ultima Posizione DF Abs (len-1)", value=int(len(df) - 1))
+                st.metric("Lunghezza Calcolo VP (Barre)", len(profile_df))
+                st.write(f"Segmento: `{swing.start_index}` ➔ `{df.index[-1]}`")
+            with c3:
+                st.metric("Ultima Barra del Dataframe", str(df.index[-1]))
+                st.write(f"Ultima Barra usata nel VP: `{profile_df.index[-1]}`")
 
-            # --- CORREZIONE LOGICA ANCHORED PROFILE FINO A OGGI ---
-            swing_df = swing.data_to_current(df)
-            # ------------------------------------------------------
-
-            st.write("#### 📊 Statistiche Quantitative di Controllo")
-            st.info(f"""
-            * **Numero totale di barre disponibili nel DataFrame:** {len(df)}
-            * **Numero di barre effettivamente fornite al motore VP:** {len(swing_df)} *(Inizio Swing ➔ Oggi)*
-            * **Indice temporale dell'ultima candela calcolata dal VP:** `{swing_df.index[-1]}`
-            """)
-            
-            # Calcolo Volume Profile sulle barre espanse ed estese fino ad oggi
-            profile = calculate_volume_profile(swing_df)
-            
-            # Generazione e stampa del grafico Plotly
-            fig = create_chart(df, swing, profile, ema_period=ema_period)
+            # 3. Il grafico riceve gli oggetti puliti e disegna lo swing reale ma il VP ancorato esteso
+            fig = create_chart(df, swing, profile)
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Errore durante l'esecuzione del programma: {e}")
+        st.error(f"Errore: {e}")
 
 if __name__ == "__main__":
     main()
