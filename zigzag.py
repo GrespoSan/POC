@@ -66,6 +66,15 @@ class Swing:
         """
         return df.iloc[self.start.position:self.end.position + 1].copy()
 
+   def profile_data(self, df: pd.DataFrame) -> pd.DataFrame:
+    	"""
+    	Restituisce il DataFrame dal pivot iniziale dello swing
+    	fino all'ultima candela disponibile.
+
+    	Da usare ESCLUSIVAMENTE per il Volume Profile.
+    	"""
+    	return df.iloc[self.start.position:].copy()
+
     @property
     def length(self) -> int:
         return self.end.position - self.start.position + 1

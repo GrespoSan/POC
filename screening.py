@@ -76,8 +76,8 @@ def analyze_ticker(
     if swing is None:
         return None
 
-    swing_df = swing.data(df)
-    profile = calculate_volume_profile(swing_df)
+    profile_df = swing.profile_data(df)
+    profile = calculate_volume_profile(profile_df)
 
     if profile is None:
         return None
