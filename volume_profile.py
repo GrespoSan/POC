@@ -179,7 +179,7 @@ def calculate_value_area(
 
 def calculate_volume_profile(
     df: pd.DataFrame,
-    bins: int = 150,
+    bins: int = 50,
     value_area: float = 0.70
 ) -> Optional[VolumeProfile]:
     """
