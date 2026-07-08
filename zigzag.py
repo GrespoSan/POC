@@ -66,14 +66,14 @@ class Swing:
         """
         return df.iloc[self.start.position:self.end.position + 1].copy()
 
-   def profile_data(self, df: pd.DataFrame) -> pd.DataFrame:
-    	"""
-    	Restituisce il DataFrame dal pivot iniziale dello swing
-    	fino all'ultima candela disponibile.
+    def profile_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Restituisce il DataFrame dal pivot iniziale dello swing
+        fino all'ultima candela disponibile.
 
-    	Da usare ESCLUSIVAMENTE per il Volume Profile.
-    	"""
-    	return df.iloc[self.start.position:].copy()
+        Da usare ESCLUSIVAMENTE per il Volume Profile.
+        """
+        return df.iloc[self.start.position:].copy()
 
     @property
     def length(self) -> int:
@@ -153,7 +153,6 @@ def clamp(value, low, high):
 
 
 def normalize(value, min_value, max_value):
-    # CORREZIONE: Se i valori coincidono (es. un solo swing), il punteggio deve essere massimo (1.0)
     if max_value == min_value:
         return 1.0
     return (value - min_value) / (max_value - min_value)
@@ -227,7 +226,6 @@ class PivotDetector:
     def detect(self) -> List[Pivot]:
         pivots = []
 
-        # Scansione della finestra mobile escludendo i margini esterni
         for i in range(self.window, len(self.df) - self.window):
             if self._is_pivot_high(i):
                 pivots.append(
@@ -248,9 +246,7 @@ class PivotDetector:
                     )
                 )
 
-        # Applica prima la rimozione dei duplicati grezzi dello stesso tipo
         pivots = remove_duplicate_pivots(pivots)
-        # Filtra le oscillazioni insignificanti (rumore monetario) rispetto all'ATR
         pivots = self._filter_noise(pivots)
         return pivots
 
@@ -279,8 +275,6 @@ class PivotDetector:
             if pd.isna(atr) or atr <= 0:
                 continue
 
-            # CORREZIONE: Applica il filtro della distanza ATR solo se sono pivot alternati.
-            # Se per rumore strutturale sono dello stesso tipo, mantieni l'alternanza logica.
             if pivot.kind == last.kind:
                 if pivot.kind == "high" and pivot.price > last.price:
                     filtered[-1] = pivot
@@ -293,7 +287,7 @@ class PivotDetector:
 
             dynamic_ratio = self.min_atr_ratio
             if pivot.kind != last.kind:
-                dynamic_ratio *= 0.8  # Agevola le transizioni strutturali pulite
+                dynamic_ratio *= 0.8
 
             if ratio >= dynamic_ratio:
                 filtered.append(pivot)
@@ -394,7 +388,7 @@ class MacroSwingDetector:
             atr_score = normalize(swing.atr_ratio, min_atr, max_atr)
             recency = exponential_recency(i, total)
 
-            # Sistema di ponderazione bilanciato: 35% Ampiezza, 25% Volatilità, 10% Durata, 30% Recenza
+            # 35% Ampiezza, 25% Volatilità, 10% Durata, 30% Recenza
             swing.score = (
                 move_score * 35.0 +
                 atr_score * 25.0 +
@@ -412,7 +406,7 @@ def detect_macro_swing(
     window: int = 5,
     atr_period: int = 14,
     min_atr_ratio: float = 1.5,
-    min_score: float = 20.0  # Abbassato leggermente il filtro per evitare scarti iper-conservativi
+    min_score: float = 20.0
 ) -> Optional[Swing]:
     """
     Punto di accesso principale per identificare il miglior Macro Swing strutturale del grafico.
