@@ -179,7 +179,7 @@ def calculate_value_area(
 
 def calculate_volume_profile(
     df: pd.DataFrame,
-    bins: int = 50,
+    bins: int = 500,
     value_area: float = 0.70
 ) -> Optional[VolumeProfile]:
     """
@@ -247,8 +247,7 @@ if __name__ == "__main__":
     df = load_ticker("AAPL", 500)
     swing = detect_macro_swing(df)
     
-    print(len(df), len(swing_df))
-    print(df.index[-1], swing_df.index[-1])
+   
     
     if swing is None:
         print("Nessuno swing rilevato per il test.")
